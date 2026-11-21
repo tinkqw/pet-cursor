@@ -238,29 +238,55 @@ enum SkinMaker {
         return pts.map { CGPoint(x: c.x + $0.0 * ca - $0.1 * sa, y: c.y + $0.0 * sa + $0.1 * ca) }
     }
 
-    static let toes: [(CGFloat, CGFloat, CGFloat)] = [(-34, -16, 12), (-13, -34, 13), (13, -34, 13), (34, -16, 12)]
+    /// 以 c 为原点、按 k 缩放的椭圆
+    static func oval(_ c: CGPoint, _ k: CGFloat, _ x: CGFloat, _ y: CGFloat, _ rx: CGFloat, _ ry: CGFloat) -> CGRect {
+        box(c.x + (x - rx) * k, c.y + (y - ry) * k, c.x + (x + rx) * k, c.y + (y + ry) * k)
+    }
 
-    /// 爪子：掌垫 + 4 个趾头；point=true 时一个趾头伸长当「指」
+    /// 爪子（同自带橘猫）：一整只圆手套，上沿 4 个鼓包当趾头；
+    /// point=true 时最左边的趾头沿手套左边伸长成粗粗的「食指」
     static func paw(_ c: CGPoint, _ k: CGFloat = 1, point: Bool = false) -> [Shape] {
-        var sh: [Shape] = [.ellipse(box(c.x - 30 * k, c.y - 8 * k, c.x + 30 * k, c.y + 40 * k))]
-        for (dx, dy, r) in toes {
-            if point && dx == -13 {
-                sh.append(.rrect(box(c.x + (dx - 12) * k, c.y - 76 * k, c.x + (dx + 12) * k, c.y - 10 * k), 12 * k))
-            } else {
-                sh.append(.ellipse(box(c.x + (dx - r) * k, c.y + (dy - r) * k, c.x + (dx + r) * k, c.y + (dy + r) * k)))
-            }
+        var sh: [Shape] = [.ellipse(oval(c, k, 0, 6, 38, 36))]
+        if point {
+            sh.append(.rrect(box(c.x - 38 * k, c.y - 92 * k, c.x - 6 * k, c.y + 4 * k), 16 * k))
+            sh += [(6, -26, 14), (22, -22, 14), (33, -10, 12)].map { .ellipse(oval(c, k, $0.0, $0.1, $0.2, $0.2)) }
+        } else {
+            sh += [(-25, -22, 15), (-9, -32, 16), (9, -32, 16), (25, -22, 15)].map { .ellipse(oval(c, k, $0.0, $0.1, $0.2, $0.2)) }
         }
         return sh
     }
 
+    /// 大粉肉垫：三瓣掌垫 + 每个趾头一颗
     static func pinkPads(_ g: CGContext, _ c: CGPoint, _ k: CGFloat = 1, point: Bool = false) {
-        g.setFillColor(rgb(255, 170, 185))
-        g.fillEllipse(in: box(c.x - 16 * k, c.y + 6 * k, c.x + 16 * k, c.y + 30 * k))
-        for (dx, dy0, _) in toes {
-            let r: CGFloat = abs(dx) == 13 ? 7 : 6
-            let dy = point && dx == -13 ? -62 : dy0
-            g.fillEllipse(in: box(c.x + (dx - r) * k, c.y + (dy - r) * k, c.x + (dx + r) * k, c.y + (dy + r) * k))
+        g.setFillColor(rgb(245, 140, 160))
+        let beans: [(CGFloat, CGFloat, CGFloat, CGFloat)] = point
+            ? [(-22, -74, 9, 11), (6, -22, 8, 9), (22, -18, 8, 9), (33, -7, 6, 7)]
+            : [(-25, -18, 8, 9), (-9, -28, 9, 10), (9, -28, 9, 10), (25, -18, 8, 9)]
+        for (x, y, rx, ry) in beans + [(0, 20, 22, 15), (-11, 9, 11, 10), (11, 9, 11, 10)] {
+            g.fillEllipse(in: oval(c, k, x, y, rx, ry))
         }
+    }
+
+    /// 握拳：拳身 + 4 个指节
+    static func fist(_ c: CGPoint) -> [Shape] {
+        var sh: [Shape] = [.rrect(box(c.x - 36, c.y - 16, c.x + 36, c.y + 38), 22)]
+        for dx: CGFloat in [-27, -9, 9, 27] { sh.append(.ellipse(box(c.x + dx - 12, c.y - 30, c.x + dx + 12, c.y - 4))) }
+        return sh
+    }
+
+    // 链接 / 张开爪 / 抓紧爪：爪子本身就是指针，往左上斜着，像在指；宠物照常坐在右下，不用举爪
+    static let signTilt: CGFloat = -22 * .pi / 180     // 往左上倾
+    static let linkC = CGPoint(x: 74, y: 95), openC = CGPoint(x: 64, y: 76), fistC = CGPoint(x: 66, y: 78)
+    static let linkK: CGFloat = 0.95, openK: CGFloat = 1.0, fistK: CGFloat = 1.15
+
+    /// 绕 c 转 signTilt（和画爪子时的画布旋转一致），用来算点击点
+    static func turn(_ p: CGPoint, _ c: CGPoint) -> CGPoint {
+        let dx = p.x - c.x, dy = p.y - c.y, a = signTilt
+        return CGPoint(x: c.x + dx * cos(a) - dy * sin(a), y: c.y + dx * sin(a) + dy * cos(a))
+    }
+
+    static func tilt(_ g: CGContext, _ c: CGPoint, scale k: CGFloat = 1) {
+        g.translateBy(x: c.x, y: c.y); g.rotate(by: signTilt); g.scaleBy(x: k, y: k); g.translateBy(x: -c.x, y: -c.y)
     }
 
     static func font(_ name: String, _ size: CGFloat) -> CTFont { CTFontCreateWithName(name as CFString, size, nil) }
@@ -295,9 +321,9 @@ enum SkinMaker {
         strokeFill(g, [.rrect(box(32, 26, 40, 126), 3), .rrect(box(18, 20, 54, 30), 4), .rrect(box(18, 122, 54, 132), 4)])
         out["02_文字输入"] = (down(g), CGPoint(x: 36, y: 76))
 
-        g = symCtx(); let lc = CGPoint(x: 52, y: 92)
-        strokeFill(g, paw(lc, 0.95, point: true)); pinkPads(g, lc, 0.95, point: true)
-        out["03_链接"] = (down(g), CGPoint(x: 40, y: 20))
+        g = symCtx(); let lc = linkC; tilt(g, lc)
+        strokeFill(g, paw(lc, linkK, point: true)); pinkPads(g, lc, linkK, point: true)
+        out["03_链接"] = (down(g), turn(CGPoint(x: lc.x - 22 * linkK, y: lc.y - 92 * linkK), lc))   // 「食指」的尖
 
         g = symCtx(); var c = CGPoint(x: 60, y: 62); let r: CGFloat = 46
         let red = rgb(225, 45, 40)
@@ -344,13 +370,19 @@ enum SkinMaker {
         }
         out["13_复制"] = (down(g), tip)
 
-        c = CGPoint(x: 58, y: 66)
-        g = symCtx(); strokeFill(g, paw(c)); pinkPads(g, c); out["14_张开爪"] = (down(g), CGPoint(x: c.x, y: c.y + 8))
-        g = symCtx(); strokeFill(g, [.ellipse(box(c.x - 34, c.y - 30, c.x + 34, c.y + 34))])
-        g.setStrokeColor(outline); g.setLineWidth(4); g.setLineCap(.butt)
-        for dx: CGFloat in [-14, 0, 14] {
-            g.strokeLineSegments(between: [CGPoint(x: c.x + dx, y: c.y - 30), CGPoint(x: c.x + dx, y: c.y - 12)])
+        c = openC
+        g = symCtx(); tilt(g, c); strokeFill(g, paw(c, openK)); pinkPads(g, c, openK)
+        out["14_张开爪"] = (down(g), turn(CGPoint(x: c.x, y: c.y + 8), c))
+        c = fistC
+        g = symCtx(); tilt(g, c, scale: fistK); strokeFill(g, fist(c))
+        g.setStrokeColor(outline); g.setLineWidth(4); g.setLineCap(.round)
+        for dx: CGFloat in [-18, 0, 18] {                        // 指缝
+            g.strokeLineSegments(between: [CGPoint(x: c.x + dx, y: c.y - 16), CGPoint(x: c.x + dx, y: c.y + 2)])
         }
+        let thumb = CGMutablePath()                              // 横在拳前的大拇指
+        thumb.move(to: CGPoint(x: c.x - 34, y: c.y + 8))
+        thumb.addQuadCurve(to: CGPoint(x: c.x + 10, y: c.y + 14), control: CGPoint(x: c.x - 14, y: c.y + 26))
+        g.addPath(thumb); g.strokePath()
         out["15_抓紧爪"] = (down(g), c)
 
         c = CGPoint(x: 50, y: 50)
@@ -362,6 +394,16 @@ enum SkinMaker {
             g.addPath(CGPath(roundedRect: b, cornerWidth: 3, cornerHeight: 3, transform: nil)); g.fillPath()
         }
         out["16_放大"] = (down(g), c)
+
+        // 链接 / 张开爪 / 抓紧爪：App 里带了画好的爪子图（Resources/Pointers，256 画布、已摆在左上）就用图，没有就用上面画的
+        for (n, file, hot) in [("03_链接", "03_link", CGPoint(x: 18.8, y: 39.8)),      // 最左上那个趾头
+                               ("14_张开爪", "14_open", CGPoint(x: 54.2, y: 48.9)),
+                               ("15_抓紧爪", "15_grab", CGPoint(x: 52.2, y: 47.8))] {
+            if let u = Bundle.main.url(forResource: file, withExtension: "png", subdirectory: "Pointers"),
+               let s = CGImageSourceCreateWithURL(u as CFURL, nil), let img = CGImageSourceCreateImageAtIndex(s, 0, nil) {
+                out[n] = (img, hot)
+            }
+        }
         return out
     }
 
@@ -556,8 +598,9 @@ enum SkinMaker {
     // MARK: 出图提示词（菜单「复制出图提示词」）
     static let prompt = """
     A character sprite sheet of ONE cute chibi [在这里写你的宠物：品种、毛色、特征，如 grey-and-white British Shorthair cat with round face and yellow eyes, matching the attached photo], drawn 20 times in a strict grid of 4 columns x 5 rows. Every cell shows the exact same character (same markings, same proportions, same colors) in a different pose. Style: kawaii sticker, big head, big shiny eyes, small body, thick dark brown outline (#3A2014) around the whole figure, flat colors, soft pink blush, no gradients, no shadows, no ground. Background: one flat solid pure green #00FF00 everywhere (if the pet has any green on it, use pure magenta #FF00FF instead), no texture, no grid lines, no borders. Each figure is centered in its cell, fully inside it, with wide empty space between figures; figures never touch or overlap. No text, no letters, no numbers, no arrows, no symbols, no props.
-    Rows 1-4 (16 poses): the pet stands facing forward and raises ONE front paw up toward the upper-left, as if holding up a small sign; vary only the face and body mood:
-    1 happy smile, 2 calm focused, 3 excited sparkling eyes, 4 pouty grumpy, 5 waiting with a sweat drop, 6 determined, 7 stretching sideways, 8 stretching tall, 9 head tilted left, 10 head tilted right, 11 confused, 12 one eye closed aiming, 13 winking, 14 cheerful open mouth, 15 tense with clenched paw, 16 curious wide eyes.
+    Anatomy: in every cell the pet has exactly TWO front legs and TWO hind legs, never an extra paw, arm or leg.
+    Rows 1-4 (16 poses): the pet sits facing forward with both front paws resting on the ground in front of her; she never raises a paw in these 16; vary only the face and head mood:
+    1 happy smile, 2 calm focused, 3 excited sparkling eyes, 4 pouty grumpy, 5 waiting with a sweat drop, 6 determined, 7 leaning to one side, 8 sitting up tall, 9 head tilted left, 10 head tilted right, 11 confused, 12 one eye closed aiming, 13 winking, 14 cheerful open mouth, 15 tense gritting teeth, 16 curious wide eyes.
     Row 5: 17 dancing with both front paws up, 18 dancing waving one paw, 19 dancing with eyes closed and arms out, 20 curled up asleep with eyes closed.
     """
 }

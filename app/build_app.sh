@@ -23,6 +23,7 @@ lipo -create "$TMP/app-arm64" "$TMP/app-x86_64" -output "$APP/Contents/MacOS/Ora
 for d in "$ROOT"/skins/*/; do
   [ -f "$d/theme.cursor" ] && ditto "$d" "$APP/Contents/Resources/Skins/$(basename "$d")"
 done
+ditto "$HERE/pointers" "$APP/Contents/Resources/Pointers"   # 链接 / 张开爪 / 抓紧爪的爪子图，换皮时用
 python3 - "$HERE/AppIcon-source.png" "$APP/Contents/Resources" "$TMP" <<'PY'
 import sys, os, subprocess
 from PIL import Image, ImageDraw
