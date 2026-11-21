@@ -179,6 +179,10 @@ enum Cursors {
 @_silgen_name("CGSSetConnectionProperty")
 func CGSSetConnectionProperty(_ cid: Int32, _ target: Int32, _ key: CFString, _ value: CFTypeRef) -> Int32
 
+// 系统设置 → 辅助功能 → 显示 → 指针大小 的倍数（1 = 默认）。登记的指针由系统自动放大，小窗口要自己乘
+@_silgen_name("CGSGetCursorScale")
+func CGSGetCursorScale(_ cid: Int32, _ scale: UnsafeMutablePointer<Float>) -> Int32
+
 final class IdleCat {
     enum State: String { case normal, dance, sleep }
     static let idleAfter: TimeInterval = 5
@@ -219,8 +223,8 @@ final class IdleCat {
             let w = (e["PointsWide"] as? NSNumber)?.doubleValue ?? 40
             size = NSSize(width: w, height: w)
             hot = CGPoint(x: (e["HotSpotX"] as? NSNumber)?.doubleValue ?? 0, y: (e["HotSpotY"] as? NSNumber)?.doubleValue ?? 0)
-            // 用 2 倍图，竖排多帧切开
-            guard let src = CGImageSourceCreateWithData(reps[1] as CFData, nil),
+            // 用最大的一张（4 倍图），指针调大后放大也清楚；竖排多帧切开
+            guard let src = CGImageSourceCreateWithData(reps[reps.count - 1] as CFData, nil),
                   let sheet = CGImageSourceCreateImageAtIndex(src, 0, nil) else { continue }
             let fh = sheet.height / n
             let imgs = (0..<n).compactMap { i -> NSImage? in
@@ -233,6 +237,13 @@ final class IdleCat {
     }
 
     var available: Bool { frames[.dance] != nil && frames[.sleep] != nil }
+
+    /// 系统指针放大倍数；读不到时按 1 处理
+    static func cursorScale() -> CGFloat {
+        var s: Float = 1
+        guard CGSGetCursorScale(CGSMainConnectionID(), &s) == 0, s >= 1, s <= 16 else { return 1 }
+        return CGFloat(s)
+    }
 
     /// 鼠标多久没动（移动、点击、滚轮、拖动里最近的一次）
     static func mouseIdle() -> TimeInterval {
@@ -278,8 +289,11 @@ final class IdleCat {
     func enter(_ s: State) {
         guard let f = frames[s] else { return }
         // 窗口左上角对齐「指针尖」：鼠标位置减去点击点（屏幕坐标原点在左下）
-        let loc = NSEvent.mouseLocation
-        window.setFrame(NSRect(x: loc.x - hot.x, y: loc.y + hot.y - size.height, width: size.width, height: size.height), display: false)
+        // 尺寸和点击点都乘系统指针倍数，跟放大后的指针一样大，进出跳舞不跳变
+        let loc = NSEvent.mouseLocation, k = IdleCat.cursorScale()
+        let w = size.width * k, h = size.height * k
+        window.setFrame(NSRect(x: loc.x - hot.x * k, y: loc.y + hot.y * k - h, width: w, height: h), display: false)
+        imageView.frame = NSRect(x: 0, y: 0, width: w, height: h)
         var i = 0
         imageView.image = f.images[0]
         animTimer?.invalidate()
